@@ -1,0 +1,7 @@
+Get mean Dp
+
+root@BlueGOAT:/mnt/e/thesis_stuff/coverage# bcftools query -f '[%DP\n]' Virginia_Final.vcf.gz \
+    | awk '{sum+=$1; n++} END {print "Mean DP:", sum/n}'
+
+root@BlueGOAT:/mnt/e/thesis_stuff/coverage# bcftools query -f '[%DP\n]' Canada_Final.vcf.gz     | awk '{sum+=$1; n++} END {print "Mean DP:", sum/n}'
+
