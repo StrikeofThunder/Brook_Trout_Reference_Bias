@@ -1,0 +1,21 @@
+#!/bin/bash
+# Subset a VCF to only chromosomes 
+# list file, then count variant records per chromosome in the subset.
+#
+# Core logic:
+#   bcftools view -r $(paste -sd, <chrom_list.txt>) -Ou <input.vcf.gz> \
+#     | bcftools query -f '%CHROM\n' \
+#     | sort | uniq -c > <output_counts.txt>
+#
+# `paste -sd,` joins the chromosome list into a single comma-separated
+# string, which bcftools view -r requires for a multi-region subset.
+
+# --- Virginia ---
+bcftools view -r $(paste -sd, V_Chromosomes.txt) -Ou refbias_raw.vcf.gz \
+  | bcftools query -f '%CHROM\n' \
+  | sort | uniq -c > virginia_42chrom_counts.txt
+
+# --- Canada ---
+bcftools view -r $(paste -sd, C_Chromosomes.txt) -Ou S.font_sex_raw.vcf.gz \
+  | bcftools query -f '%CHROM\n' \
+  | sort | uniq -c > canada_chrom_counts.txt
