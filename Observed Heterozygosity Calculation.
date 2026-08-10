@@ -1,0 +1,35 @@
+#!/bin/bash
+# Mohn heterozygosity calculations (Virginia + Canada)
+
+# --- Mohn Het Calc ---
+# Per-individual heterozygosity (F statistic) across the full VCF.
+vcftools --gzvcf Virginia_noScaffolds.vcf.gz --het --out Virginia_noScaff_mohncalc
+vcftools --gzvcf Canada_noScaffolds.vcf.gz --het --out Canada_noScaff_mohncalc
+
+# --- Mohn by Chrom calc ---
+# Per-chromosome heterozygosity: loops over each chromosome in the target
+# list and runs vcftools --het restricted to that chromosome.
+
+VCF="Virginia_noScaffolds.vcf.gz"
+CHROMS="virg_chroms.txt"
+
+while read CHR; do
+    echo "Processing chromosome $CHR for Virginia"
+
+    vcftools --gzvcf $VCF \
+             --chr $CHR \
+             --het \
+             --out Virginia_${CHR}
+done < $CHROMS
+
+VCF="Canada_noScaffolds.vcf.gz"
+CHROMS="canada_chroms.txt"
+
+while read CHR; do
+    echo "Processing chromosome $CHR for Canada"
+
+    vcftools --gzvcf $VCF \
+             --chr $CHR \
+             --het \
+             --out Canada_${CHR}
+done < $CHROMS
