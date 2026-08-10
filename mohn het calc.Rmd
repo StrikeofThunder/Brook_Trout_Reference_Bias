@@ -1,0 +1,154 @@
+---
+title: "Mohn Check of Het"
+output: html_document
+date: "2026-04-01"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+
+# Function to read and compute Ho
+compute_Ho <- function(het_file, label){
+  df <- read.table(het_file, header = TRUE)
+  df <- df %>%
+    mutate(Ho = (N_SITES - O.HOM.) / N_SITES,
+           Filter = label)
+  return(df)
+}
+
+# Load all four
+V_noScaff   <- compute_Ho("Virginia_noScaff_mohncalc.het",   "MyFiltering")
+C_noScaff   <- compute_Ho("Canada_noScaff_mohncalc.het",     "MyFiltering")
+
+
+# Combine
+Virginia <- bind_rows(V_noScaff,) %>% mutate(State = "Virginia")
+Canada   <- bind_rows(C_noScaff,) %>% mutate(State = "Canada")
+
+                      
+All_Ho <- bind_rows(Virginia, Canada)
+
+All_Ho %>%
+  group_by(State,) %>%
+  summarise(
+    mean_Ho = mean(Ho),
+    sd_Ho   = sd(Ho),
+    min_Ho  = min(Ho),
+    max_Ho  = max(Ho),
+    n       = n()
+  )
+
+```
+
+Visualize
+
+```{r}
+All_Ho$State  <- factor(All_Ho$State,  levels = c("Virginia", "Canada"))
+
+
+het_p4 <- ggplot(All_Ho, aes(x = State, y = Ho * 100)) +
+  geom_boxplot(aes(fill = State), alpha = 0.8, outlier.shape = NA) +
+  geom_jitter(color = "black",
+              width = 0.15,
+              size = 1.2,
+              alpha = 0.7) +
+  scale_fill_manual(values = c("Virginia" = "purple",
+                               "Canada"   = "red")) +
+  theme_light(base_size = 14) +
+  labs(
+    x = "Reference Genome",
+    y = "Percent Heterozygous SNPs (%)",
+    title = "Observed Heterozygosity by Reference"
+  ) +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    legend.position = "none"   # remove legend since colors match states
+  )
+
+# Save to PDF
+ggsave("Het_plot_mohn_rep4.pdf", plot = het_p4, width = 6, height = 5)
+
+```
+
+By chromosome
+
+```{r}
+
+library(dplyr)
+library(readr)
+library(stringr)
+library(purrr)
+
+# 1. Load chromosome map
+chrom_map <- read_csv("chrom_map.csv")
+
+# 2. Load Virginia het files
+virg_files <- list.files("Virginia_mohn_again", pattern = "Virginia_.*het$", full.names = TRUE)
+
+virg_df <- map_df(virg_files, function(f) {
+  df <- read_table(f, comment = "#")
+  df$Chrom <- str_extract(basename(f), "Sfo_[0-9]+")
+  df$State <- "Virginia"
+  df
+})
+
+# 3. Load Canada het files
+can_files <- list.files("Canada_mohn_again", pattern = "Canada_.*het$", full.names = TRUE)
+
+can_df <- map_df(can_files, function(f) {
+  df <- read_table(f, comment = "#")
+  df$Chrom <- str_extract(basename(f), "NC_[0-9]+\\.[0-9]+")
+  df$State <- "Canada"
+  df
+})
+
+
+# Join Virginia and Canada to the map
+virg_df2 <- virg_df %>% left_join(chrom_map, by = c("Chrom" = "Virginia"))
+can_df2  <- can_df  %>% left_join(chrom_map, by = c("Chrom" = "Canada"))
+
+# Combine into one tidy table
+All_Ho <- bind_rows(virg_df2, can_df2)
+
+#build table of Ho values
+Ho_table <- Chrom_Ho %>%
+  select(TrueN, State, Ho) %>%
+  group_by(TrueN, State) %>%
+  summarise(Mean_Ho = mean(Ho, na.rm = TRUE), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = TrueN, values_from = Mean_Ho) %>%
+  arrange(State)
+
+write_csv(Ho_table, "Ho_by_chromosome.csv")
+```
+
+graph
+
+```{r}
+library(ggplot2)
+
+Chrom_Ho <- Chrom_Ho %>%
+  mutate(TrueN = factor(TrueN, levels = sort(unique(TrueN))))
+
+ggplot(Chrom_Ho, aes(x = State, y = Ho*100, fill = State)) +
+  geom_boxplot(outlier.size = 0.8, width = 0.6) +
+  facet_wrap(~ TrueN, scales = "fixed", labeller = labeller(TrueN = function(x) paste("Chromosome:", x))) +
+  scale_fill_manual(values = c("Virginia" = "purple", "Canada" = "red")) +
+  labs(
+    title = "Observed Heterozygosity by Chromosome",
+    x = NULL,
+    y = "Observed Heterozygosity (Ho)"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 7),
+    axis.text.x = element_text(size = 7),
+    legend.position = "bottom"
+  )
+
+ggsave("Ho_by_chromosome.png", width = 16, height = 12, dpi = 300)
+```
