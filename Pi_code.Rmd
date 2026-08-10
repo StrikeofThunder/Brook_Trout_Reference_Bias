@@ -1,0 +1,254 @@
+---
+title: "Nucleic Diversity"
+output: html_document
+date: "2026-03-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+
+
+chrom_map <- read.csv("Final_Chrom_sheet.csv")
+vir <- read_tsv("virginia_pi.windowed.pi") %>%
+  left_join(chrom_map, by = c("CHROM" = "Virginia")) %>%
+  mutate(ref = "Virginia")
+can <- read_tsv("canada_pi.windowed.pi") %>%
+  left_join(chrom_map, by = c("CHROM" = "Canada")) %>%
+  mutate(ref = "Canada")
+
+pi <- bind_rows(vir, can)
+
+head(pi)
+
+
+head(vir)
+head(can)
+
+Genomwide_pi <- pi %>%
+  group_by(ref) %>%
+  summarise(mean_pi = mean(PI, na.rm = TRUE))
+
+Genomwide_pi
+
+
+chrom_pi <- pi %>%
+  group_by(ref, TrueN) %>%
+  summarise(mean_pi = mean(PI, na.rm = TRUE)) %>%
+  ungroup()
+
+chrom_pi_wide <- chrom_pi %>%
+  pivot_wider(
+    names_from = TrueN,
+    values_from = mean_pi
+  )
+
+write_csv(chrom_pi_wide, "chromosome_mean_pi_table.csv")
+
+ check <-pi %>%
+  group_by(ref, TrueN) %>%
+  summarise(mean_snps = mean(N_VARIANTS), mean_pi = mean(PI))
+
+
+
+```
+
+manhattan plot
+```{r}
+library(tidyverse)
+
+# Order chromosomes numerically
+pi <- pi %>% mutate(TrueN = factor(TrueN, levels = sort(unique(TrueN))))
+
+# Compute chromosome lengths
+chrom_lengths <- pi %>%
+  group_by(TrueN) %>%
+  summarise(chr_len = max(BIN_END)) %>%
+  arrange(TrueN) %>%
+  mutate(cum_start = lag(cumsum(chr_len), default = 0))
+
+# Add cumulative positions
+pi_manhattan <- pi %>%
+  left_join(chrom_lengths, by = "TrueN") %>%
+  mutate(pos_cum = BIN_START + cum_start)
+
+axis_df <- chrom_lengths %>%
+  mutate(center = cum_start + chr_len/2)
+
+ p6 <-ggplot(pi_manhattan, aes(pos_cum, PI, color = ref)) +
+  geom_point(alpha = 0.6, size = 1) +
+  geom_vline(xintercept = chrom_lengths$cum_start, color = "grey70", size = 0.3) +
+  scale_x_continuous(
+    breaks = axis_df$center,
+    labels = axis_df$TrueN
+  ) +
+  theme_bw() +
+  labs(x = "Chromosome", y = "Nucleotide diversity (π)", color = "Reference") +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+ggsave("nucleotide_diversity_scatter_scaff6.pdf", plot = p6, width = 12, height = 8)
+```
+#graphs not on top of each other
+
+```{r}
+# Order chromosomes numerically
+pi <- pi %>% mutate(TrueN = factor(TrueN, levels = sort(unique(TrueN))))
+
+# Compute chromosome lengths
+chrom_lengths <- pi %>%
+  group_by(TrueN) %>%
+  summarise(chr_len = max(BIN_END)) %>%
+  arrange(TrueN) %>%
+  mutate(cum_start = lag(cumsum(chr_len), default = 0))
+
+# Add cumulative positions
+pi_manhattan <- pi %>%
+  left_join(chrom_lengths, by = "TrueN") %>%
+  mutate(pos_cum = BIN_START + cum_start)
+
+axis_df <- chrom_lengths %>%
+  mutate(center = cum_start + chr_len/2)
+
+p7 <- ggplot(pi_manhattan, aes(pos_cum, PI, color = ref)) +
+  geom_point(alpha = 0.6, size = 1) +
+  geom_vline(xintercept = chrom_lengths$cum_start, color = "grey70", linewidth = 0.3) +
+  scale_x_continuous(
+    breaks = axis_df$center,
+    labels = axis_df$TrueN
+  ) +
+  scale_color_manual(values = c("Virginia" = "purple", "Canada" = "red")) +  # <-- add this
+  facet_wrap(~ ref, ncol = 1, scales = "free_y") +
+  theme_bw() +
+  labs(x = "Chromosome", y = "Nucleotide diversity (π)", color = "Reference") +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+
+ggsave("Manhattan_not_stacked.png", plot = p7, width = 12, height = 8)
+
+```
+
+Graphing By Chrom
+```{r}
+PiChrom <- read.csv("chromosome_mean_pi_table.csv")
+head(PiChrom)
+
+
+PiChrom_long <- PiChrom %>%
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "Chromosome",
+    values_to = "Pi"
+  ) %>%
+  mutate(
+    Chromosome = factor(Chromosome, levels = paste0("X", 1:42))
+  )
+
+pip <- ggplot(PiChrom_long, aes(x = ref, y = Pi, color = ref)) +
+  geom_point(size = 3, alpha = 0.9) +
+  facet_wrap(~ Chromosome, ncol = 7) +
+  theme_bw(base_size = 14) +
+  theme(
+    strip.text = element_text(size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "Per‑Chromosome Pi",
+    y = "Pi",
+    x = ""
+  )
+ggsave("Per_Chrom_pi.pdf", plot = pip, width = 12, height = 8)
+```
+
+Boxplot of pi using chroms
+```{r}
+#Force desired order on x-axis
+PiChrom_long$ref <- factor(PiChrom_long$ref, levels = c("Virginia", "Canada"))
+
+pi_box <- ggplot(PiChrom_long, aes(x = ref, y = Pi, fill = ref)) +
+  geom_boxplot(alpha = 0.7, width = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.15, size = 2, alpha = 0.8) +
+  theme_bw(base_size = 16) +
+  labs(
+    title = "Genome‑wide Nucleotide Diversity by Reference",
+    y = "Pi",
+    x = "Reference"
+  ) +
+  scale_fill_manual(values = c("Virginia" = "purple",
+                               "Canada"   = "red")) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(size = 14)
+  )
+ggsave("Pi_boxplot2.png", plot = pi_box, width = 12, height = 8)
+
+```
+
+Cod figure 4a
+```{r}
+Coda <-ggplot(pi, aes(x = ref, y = PI, fill = ref)) +
+  geom_boxplot(outlier.alpha = 0.2, width = 0.6) +
+  theme_bw() +
+  labs(
+    x = "Reference genome",
+    y = "Genome-wide nucleotide diversity (π)"
+  ) +
+  theme(
+    legend.position = "none"
+  )
+ggsave("Coda.pdf", plot = Coda, width = 12, height = 8)
+
+coda2 <-ggplot(pi, aes(x = ref, y = PI)) +
+  # 1. Manhattan-style jittered points (background)
+  geom_jitter(
+    aes(color = ref),
+    alpha = 0.15,
+    width = 0.15,
+    size = 0.8
+  ) +
+  # 2. Boxplot on top
+  geom_boxplot(
+    aes(fill = ref),
+    alpha = 0.6,
+    outlier.shape = NA,
+    width = 0.6
+  ) +
+  theme_bw() +
+  labs(
+    x = "Reference genome",
+    y = "Genome-wide nucleotide diversity (π)"
+  ) +
+  theme(
+    legend.position = "none"
+  )
+
+ggsave("coda2.pdf", plot = coda2, width = 12, height = 8)
+
+
+```
+
+Violin plot
+```{r}
+violin <-ggplot(pi, aes(x = ref, y = PI, fill = ref)) +
+  geom_violin(trim = FALSE, alpha = 0.7) +
+  theme_bw() +
+  labs(
+    x = "Reference genome",
+    y = "Genome-wide nucleotide diversity (π)"
+  ) +
+  theme(
+    legend.position = "none"
+  )
+
+ggsave("violin.pdf", plot = violin, width = 12, height = 8)
+
+```
